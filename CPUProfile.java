@@ -1,19 +1,10 @@
 import java.awt.Color;
-
 public class CPUProfile {
     public String name;
     public Architecture arch;
-    public int physicalCores; // Max 3
-    public int maxRAM;
-    public int maxHP;
-    public Color color;  
-
-    public CPUProfile(String name, Architecture arch, int cores, int hp, int ram, Color c) {
-        this.name = name;
-        this.arch = arch;
-        this.physicalCores = cores; // Base Actions (1-3)
-        this.maxHP = hp;
-        this.maxRAM = ram;
-        this.color = c;
+    public int physicalCores, maxHP, maxRAM;
+    public Color color;
+    public CPUProfile(String n, Architecture a, int c, int h, int r, Color co) {
+        this.name=n; this.arch=a; this.physicalCores=c; this.maxHP=h; this.maxRAM=r; this.color=co;
     }
 }

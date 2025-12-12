@@ -1,48 +1,41 @@
-import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
+import java.util.ArrayList;
 
 public class GameState {
     private static GameState instance;
+    public int currency = 1000;
 
-    public int currency = 600; // Adjusted starting cash
+    public Hardware.MoboType currentMobo = Hardware.MoboType.STD_ATX;
+    public Hardware.CpuType currentCpu = Hardware.CpuType.ATHLON;
+    public boolean useDualCpu = false; 
 
-    // CORE HARDWARE (Stats)
-    public int levelFreq = 0;   // Damage
-    public int levelRAM = 0;    // Max RAM
-    public int levelStorage = 0;// Max HP
-    
-    // NEW HARDWARE
-    public int levelCache = 0;  // Critical Hit Chance %
-    public int levelCooling = 0;// Passive HP Regen per turn
-    
-    // UNLOCKS
-    public boolean unlockHyperThreading = false; 
-    public String currentGPUSkin = "Integrated Graphics";
-    
+    public int skillLvlFCFS = 1;
+    public int skillLvlRR = 1;
+    public int skillLvlSJF = 1;
+
+    public int overclockVal = 0;
+    public int undervoltVal = 0;
+
+    public Map<Hardware.CpuType, Integer> cpuInventory = new HashMap<>();
+    public Map<Hardware.MoboType, Integer> moboInventory = new HashMap<>();
     public List<LogEntry> lastBattleLogs = new ArrayList<>();
 
-    private GameState() {}
+    private GameState() {
+        cpuInventory.put(Hardware.CpuType.ATHLON, 1);
+        moboInventory.put(Hardware.MoboType.STD_ATX, 1);
+    }
 
     public static GameState get() {
         if (instance == null) instance = new GameState();
         return instance;
     }
-
-    // --- BALANCED STAT CALCULATORS ---
-    // Frequency: +20 DMG base
-    public int getBonusDamage() { return levelFreq * 20; }  
     
-    // RAM: +40 RAM (More actions)
-    public int getBonusRAM() { return levelRAM * 40; }      
-    
-    // Storage: +150 HP (Tankiness)
-    public int getBonusHP() { return levelStorage * 150; }  
-    
-    // Cache: +5% Crit chance per level (Max 50%)
-    public double getCritChance() { return Math.min(0.50, levelCache * 0.05); }
-    
-    // Cooling: +15 HP regen per turn
-    public int getRegenAmount() { return levelCooling * 15; }
+    public void addCpu(Hardware.CpuType c) { cpuInventory.put(c, cpuInventory.getOrDefault(c, 0) + 1); }
+    public void addMobo(Hardware.MoboType m) { moboInventory.put(m, moboInventory.getOrDefault(m, 0) + 1); }
+    public int getCpuCount(Hardware.CpuType c) { return cpuInventory.getOrDefault(c, 0); }
+    public boolean hasMobo(Hardware.MoboType m) { return moboInventory.getOrDefault(m, 0) > 0; }
 
     public static class LogEntry {
         public String task; public long start; public long dur; public String type;
