@@ -5,40 +5,42 @@ import java.util.ArrayList;
 
 public class GameState {
     private static GameState instance;
-    public int currency = 2500; 
+    public int currency = 1500; 
 
-    // --- HARDWARE ---
-    public Hardware.MoboType currentMobo = Hardware.MoboType.STD_ATX;
+    // --- LOADOUT ---
     public Hardware.CpuType currentCpu = Hardware.CpuType.ATHLON;
-    public Hardware.StorageType currentStorage = Hardware.StorageType.HDD_5400;
+    public Hardware.GpuType currentGpu = Hardware.GpuType.INTEGRATED;
     public Hardware.CoolerType currentCooler = Hardware.CoolerType.STOCK;
-    public Hardware.GpuType currentGpu = Hardware.GpuType.INTEGRATED; // New GPU
-    
-    public boolean useDualCpu = false;
+    public Hardware.PsuType currentPsu = Hardware.PsuType.GENERIC_300W; // New
+
     public boolean hasECC = false;
 
     // --- UPGRADES ---
+    // RAM: 0=4GB, 1=8GB, 2=16GB, 3=32GB (Lowered max for balance)
     public int ramIndex = 0; 
-    public final int[] RAM_TIERS = {2048, 4096, 8192, 16384, 32768, 65536};
+    public final int[] RAM_TIERS = {4096, 8192, 16384, 32768};
+    
+    // Storage Level (1-20): Directly adds Max HP
     public int storageLevel = 1; 
 
-    // --- SKILLS ---
-    public int skillLvlFCFS = 1;
-    public int skillLvlRR = 1;
-    public int skillLvlSJF = 1;
-
-    // --- BIOS ---
+    // BIOS
     public int overclockVal = 0;
     public int undervoltVal = 0;
 
-    // --- INVENTORY ---
+    // INVENTORY (To lock unowned items)
     public Map<Hardware.CpuType, Integer> cpuInventory = new HashMap<>();
-    public Map<Hardware.MoboType, Integer> moboInventory = new HashMap<>();
+    public Map<Hardware.GpuType, Integer> gpuInventory = new HashMap<>();
+    public Map<Hardware.CoolerType, Integer> coolerInventory = new HashMap<>();
+    public Map<Hardware.PsuType, Integer> psuInventory = new HashMap<>();
+    
     public List<LogEntry> lastBattleLogs = new ArrayList<>();
 
     private GameState() {
+        // Starter Kit
         cpuInventory.put(Hardware.CpuType.ATHLON, 1);
-        moboInventory.put(Hardware.MoboType.STD_ATX, 1);
+        gpuInventory.put(Hardware.GpuType.INTEGRATED, 1);
+        coolerInventory.put(Hardware.CoolerType.STOCK, 1);
+        psuInventory.put(Hardware.PsuType.GENERIC_300W, 1);
     }
 
     public static GameState get() {
@@ -46,34 +48,42 @@ public class GameState {
         return instance;
     }
 
-    // --- CALCULATORS ---
+    // --- CALCULATIONS ---
+    
+    public int getTotalWatts() {
+        // CPU + GPU + Cooler + Base System Draw (50W)
+        double ocMult = 1.0 + (overclockVal / 100.0); // OC increases power draw
+        int cpuW = (int)(currentCpu.watts * ocMult);
+        return cpuW + currentGpu.watts + currentCooler.watts + 50;
+    }
+
     public int getCurrentRamMB() { return RAM_TIERS[Math.min(ramIndex, RAM_TIERS.length-1)]; }
 
     public int getCurrentMaxHP() {
-        double progress = (storageLevel - 1) / 14.0; if(progress > 1.0) progress = 1.0;
-        int added = (int)((currentStorage.maxHP - currentStorage.baseHP) * progress);
-        return currentStorage.baseHP + added;
+        // Base 100 HP + (Level * 50). Max at Lvl 20 = 1100 HP.
+        // Lower HP pool for Soulslike feel.
+        return 100 + (storageLevel * 50);
     }
     
-    // NEW: Frequency Based Damage Multiplier
-    public double getClockMultiplier() {
-        // Base is the CPU GHz. E.g. 5.0GHz = 5.0x multiplier to base skill dmg.
-        // Server CPUs (2.5GHz) have lower mult, but they rely on Cache Crits and high Core/AP counts.
-        return currentCpu.freqGHz;
+    public int calculateBaseDamage() {
+        double ghz = currentCpu.freqGHz;
+        double oc = 1.0 + (overclockVal / 100.0);
+        // ~40-60 damage base
+        return (int)(ghz * 12 * oc);
     }
-
-    // NEW: Cache Based Crit Chance
-    public double getCritChance() {
-        // e.g. 32MB Cache = 32% crit chance.
-        // Xeon (128MB) = 100% crit chance (auto-crit).
-        return Math.min(1.0, currentCpu.l3CacheMB / 100.0);
-    }
+    
+    public double getCritChance() { return Math.min(1.0, currentCpu.l3CacheMB / 100.0); }
 
     // Helpers
     public void addCpu(Hardware.CpuType c) { cpuInventory.put(c, cpuInventory.getOrDefault(c, 0)+1); }
-    public void addMobo(Hardware.MoboType m) { moboInventory.put(m, moboInventory.getOrDefault(m, 0)+1); }
-    public int getCpuCount(Hardware.CpuType c) { return cpuInventory.getOrDefault(c, 0); }
-    public boolean hasMobo(Hardware.MoboType m) { return moboInventory.getOrDefault(m, 0) > 0; }
+    public void addGpu(Hardware.GpuType g) { gpuInventory.put(g, gpuInventory.getOrDefault(g, 0)+1); }
+    public void addCooler(Hardware.CoolerType c) { coolerInventory.put(c, coolerInventory.getOrDefault(c, 0)+1); }
+    public void addPsu(Hardware.PsuType p) { psuInventory.put(p, psuInventory.getOrDefault(p, 0)+1); }
+    
+    public boolean hasCpu(Hardware.CpuType c) { return cpuInventory.getOrDefault(c, 0) > 0; }
+    public boolean hasGpu(Hardware.GpuType g) { return gpuInventory.getOrDefault(g, 0) > 0; }
+    public boolean hasCooler(Hardware.CoolerType c) { return coolerInventory.getOrDefault(c, 0) > 0; }
+    public boolean hasPsu(Hardware.PsuType p) { return psuInventory.getOrDefault(p, 0) > 0; }
 
     public static class LogEntry {
         public String task; public long start; public long dur; public String type;
