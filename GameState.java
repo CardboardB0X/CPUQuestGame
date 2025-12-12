@@ -5,29 +5,32 @@ import java.util.ArrayList;
 
 public class GameState {
     private static GameState instance;
-    public int currency = 1500; 
+    public int currency = 2000; 
+
+    // --- ROGUELIKE STATE ---
+    public int currentFloor = 1; // Starts at 1. Resets on death.
 
     // --- LOADOUT ---
     public Hardware.CpuType currentCpu = Hardware.CpuType.ATHLON;
     public Hardware.GpuType currentGpu = Hardware.GpuType.INTEGRATED;
     public Hardware.CoolerType currentCooler = Hardware.CoolerType.STOCK;
-    public Hardware.PsuType currentPsu = Hardware.PsuType.GENERIC_300W; // New
+    public Hardware.PsuType currentPsu = Hardware.PsuType.GENERIC_300W;
 
     public boolean hasECC = false;
 
     // --- UPGRADES ---
-    // RAM: 0=4GB, 1=8GB, 2=16GB, 3=32GB (Lowered max for balance)
     public int ramIndex = 0; 
-    public final int[] RAM_TIERS = {4096, 8192, 16384, 32768};
+    public final int[] RAM_TIERS = {4096, 8192, 16384, 32768}; // Max 32GB
+    public final int MAX_RAM_INDEX = RAM_TIERS.length - 1;
     
-    // Storage Level (1-20): Directly adds Max HP
     public int storageLevel = 1; 
+    public final int MAX_STORAGE_LEVEL = 20;
 
     // BIOS
     public int overclockVal = 0;
     public int undervoltVal = 0;
 
-    // INVENTORY (To lock unowned items)
+    // INVENTORY
     public Map<Hardware.CpuType, Integer> cpuInventory = new HashMap<>();
     public Map<Hardware.GpuType, Integer> gpuInventory = new HashMap<>();
     public Map<Hardware.CoolerType, Integer> coolerInventory = new HashMap<>();
@@ -36,7 +39,6 @@ public class GameState {
     public List<LogEntry> lastBattleLogs = new ArrayList<>();
 
     private GameState() {
-        // Starter Kit
         cpuInventory.put(Hardware.CpuType.ATHLON, 1);
         gpuInventory.put(Hardware.GpuType.INTEGRATED, 1);
         coolerInventory.put(Hardware.CoolerType.STOCK, 1);
@@ -49,26 +51,22 @@ public class GameState {
     }
 
     // --- CALCULATIONS ---
-    
     public int getTotalWatts() {
-        // CPU + GPU + Cooler + Base System Draw (50W)
-        double ocMult = 1.0 + (overclockVal / 100.0); // OC increases power draw
+        double ocMult = 1.0 + (overclockVal / 100.0);
         int cpuW = (int)(currentCpu.watts * ocMult);
         return cpuW + currentGpu.watts + currentCooler.watts + 50;
     }
 
-    public int getCurrentRamMB() { return RAM_TIERS[Math.min(ramIndex, RAM_TIERS.length-1)]; }
+    public int getCurrentRamMB() { return RAM_TIERS[Math.min(ramIndex, MAX_RAM_INDEX)]; }
 
     public int getCurrentMaxHP() {
-        // Base 100 HP + (Level * 50). Max at Lvl 20 = 1100 HP.
-        // Lower HP pool for Soulslike feel.
+        // Base 100 + 50 per level. Max 1100.
         return 100 + (storageLevel * 50);
     }
     
     public int calculateBaseDamage() {
         double ghz = currentCpu.freqGHz;
         double oc = 1.0 + (overclockVal / 100.0);
-        // ~40-60 damage base
         return (int)(ghz * 12 * oc);
     }
     

@@ -16,6 +16,11 @@ public class CyberQuestRPG extends JFrame {
     private int currentRAM, maxRAM;
     private int currentAP, maxAP;
     
+    // NEW MECHANICS
+    private int turboCharges = 2;
+    private int turboDuration = 0;
+    private boolean smtUsed = false;
+    
     private GamePanel gamePanel;
     private JProgressBar barHP, barRAM;
     private JLabel lblThreads;
@@ -41,13 +46,13 @@ public class CyberQuestRPG extends JFrame {
 
         initUI();
         startRound();
-        showTurnAnim("PLAYER PHASE");
+        showTurnAnim("FLOOR " + stage);
         
-        log(">> BOOT SEQUENCE COMPLETE. POWER DRAW: " + gs.getTotalWatts() + "W");
+        log(">> BOOT SEQUENCE COMPLETE.");
     }
 
     private void initUI() {
-        setTitle("STAGE " + stage + " | " + cpu.name);
+        setTitle("FLOOR " + stage + " | " + cpu.name);
         setSize(1100, 750);
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         setLayout(new BorderLayout());
@@ -74,15 +79,21 @@ public class CyberQuestRPG extends JFrame {
 
     private JPanel createControlPanel() {
         JPanel p = new JPanel(new BorderLayout());
-        JPanel skills = new JPanel(new GridLayout(2, 3, 5, 5));
+        JPanel skills = new JPanel(new GridLayout(2, 4, 5, 5)); // Added Column
         
-        // RAM Costs tuned for balance (Regen is ~100MB/turn)
         skills.add(mkBtn("FCFS", "Attack (50MB)", () -> act("FCFS", 50)));
         skills.add(mkBtn("RR", "AoE (150MB)", () -> act("RR", 150)));
         skills.add(mkBtn("SJF", "Snipe (100MB)", () -> act("SJF", 100)));
 
-        if(GameState.get().currentCpu.supportsThreads) skills.add(mkBtn("SMT", "Double AP (300MB)", () -> activateSMT()));
-        else skills.add(new JLabel("NO SMT"));
+        // TURBO BOOST
+        JButton btnTurbo = mkBtn("TURBO ("+turboCharges+")", "Boost Dmg (2 Turns)", () -> activateTurbo());
+        if(turboCharges <= 0) btnTurbo.setEnabled(false);
+        skills.add(btnTurbo);
+
+        // SMT (Limited)
+        JButton btnSmt = mkBtn("SMT (1 Use)", "Double Threads (300MB)", () -> activateSMT());
+        if(!GameState.get().currentCpu.supportsThreads || smtUsed) btnSmt.setEnabled(false);
+        skills.add(btnSmt);
         
         skills.add(mkBtn("HEAL", "Repair (200MB)", () -> act("HEAL", 200)));
         
@@ -101,13 +112,14 @@ public class CyberQuestRPG extends JFrame {
         GameState gs = GameState.get();
         int cost = baseCost - (int)(baseCost * (gs.undervoltVal/100.0));
         if(currentRAM < cost) { log(">> OUT OF MEMORY (Need " + cost + "MB)"); return; }
-        
         if(Math.random() < (gs.undervoltVal/200.0)) { log(">> KERNEL PANIC (Instability Fail)"); currentAP--; updateBars(); return; }
 
         currentRAM -= cost;
         currentAP--;
         
+        // DAMAGE CALC
         int baseDmg = gs.calculateBaseDamage();
+        if(turboDuration > 0) baseDmg = (int)(baseDmg * 1.5); // +50% Turbo
         boolean crit = Math.random() < gs.getCritChance();
         if(crit) baseDmg *= 2;
 
@@ -117,10 +129,33 @@ public class CyberQuestRPG extends JFrame {
             Monster m = arena.stream().min(Comparator.comparingInt(x->x.currentHP)).orElse(arena.get(0));
             hitMonster(m, (int)(baseDmg * 1.5));
         }
-        else if(type.equals("HEAL")) currentHP = Math.min(maxHP, currentHP + 150); // Buffed heal slightly
+        else if(type.equals("HEAL")) currentHP = Math.min(maxHP, currentHP + 150);
         
-        if(crit) log(">> CRITICAL CACHE HIT!");
+        if(crit) log(">> CRIT!");
+        if(turboDuration > 0) log(">> TURBO BOOST ACTIVE!");
+        
         checkClear(); updateBars(); gamePanel.repaint();
+    }
+    
+    private void activateTurbo() {
+        if(turboCharges <= 0) return;
+        turboCharges--;
+        turboDuration = 2; // Lasts 2 turns
+        log(">> TURBO BOOST ENGAGED! (+50% DAMAGE)");
+        // Refresh UI to disable button if 0
+        remove(createControlPanel()); add(createControlPanel(), BorderLayout.SOUTH); validate();
+    }
+
+    private void activateSMT() {
+        if(currentRAM < 300 || smtUsed) return;
+        currentRAM -= 300; 
+        smtUsed = true; // One use only
+        gamePanel.isHyperThreadingActive=true; 
+        maxAP*=2; currentAP+=maxAP/2; 
+        log(">> SMT ENABLED (ONE-TIME BURST).");
+        updateBars();
+        // Refresh UI
+        remove(createControlPanel()); add(createControlPanel(), BorderLayout.SOUTH); validate();
     }
     
     private void hitMonster(Monster m, int d) {
@@ -128,57 +163,59 @@ public class CyberQuestRPG extends JFrame {
         Timer t=new Timer(150, e->{m.isHit=false; gamePanel.repaint();}); t.setRepeats(false); t.start();
     }
 
-    private void activateSMT() {
-        if(currentRAM < 300) return;
-        currentRAM -= 300; gamePanel.isHyperThreadingActive=true; maxAP*=2; currentAP+=maxAP/2; updateBars();
-    }
-
     private void endTurn() {
         if(currentAP > 0) {
-             int confirm = JOptionPane.showConfirmDialog(this, "Threads active. End Turn?", "Wait", JOptionPane.YES_NO_OPTION);
-             if(confirm != JOptionPane.YES_OPTION) return;
+             if(JOptionPane.showConfirmDialog(this, "End Turn?", "Wait", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) return;
         }
 
         GameState gs = GameState.get();
         showTurnAnim("ENEMY PHASE");
         
+        // Turbo Decay
+        if(turboDuration > 0) turboDuration--;
+        
         Timer t = new Timer(1500, e -> {
             for(Monster m : arena) {
                 if(!m.isDead) {
-                    int dmg = (int)(25 * m.type.dmgMult); // Soulslike: High Damage
+                    int dmg = (int)(25 * m.type.dmgMult);
                     currentHP -= dmg;
                     log(m.name + " hits: " + dmg + " HP");
                     gamePanel.isPlayerHit=true;
                 }
             }
             
-            // --- REGENERATION PHASE ---
+            // Regen
             int hpRegen = gs.currentCooler.regen;
             currentHP = Math.min(maxHP, currentHP + hpRegen);
             
-            // RAM REGEN (Passive + ECC)
-            int ramRegen = 100; // Base passive
+            int ramRegen = 100; 
             if(gs.hasECC) ramRegen += 150;
             currentRAM = Math.min(maxRAM, currentRAM + ramRegen);
             
-            log(">> SYSTEM: Regenerated " + hpRegen + " HP, " + ramRegen + " MB RAM.");
-
+            // Reset AP
             currentAP = maxAP;
             if(gamePanel.isHyperThreadingActive) { maxAP/=2; currentAP=maxAP; gamePanel.isHyperThreadingActive=false; }
             
             updateBars(); gamePanel.isPlayerHit=false; gamePanel.repaint();
             
-            if(currentHP<=0) { JOptionPane.showMessageDialog(this, "SYSTEM CRASHED."); dispose(); menuRef.setVisible(true); }
+            if(currentHP<=0) lose();
             else showTurnAnim("PLAYER PHASE");
         });
         t.setRepeats(false); t.start();
     }
 
+    private void lose() {
+        JOptionPane.showMessageDialog(this, "SYSTEM CRITICAL FAILURE.\nREBOOTING TO FLOOR 1...");
+        GameState.get().currentFloor = 1; // RESET FLOOR
+        dispose(); 
+        menuRef.setVisible(true); // Back to menu, keeps gear
+        // Re-open menu to refresh title
+        menuRef.dispose(); new MainMenu().setVisible(true);
+    }
+
     private void showTurnAnim(String text) {
-        gamePanel.turnOverlayText = text;
-        gamePanel.repaint();
-        Timer t = new Timer(1000, e -> { gamePanel.turnOverlayText = ""; gamePanel.repaint(); });
-        t.setRepeats(false); t.start();
+        gamePanel.turnOverlayText = text; gamePanel.repaint();
+        Timer t = new Timer(1000, e -> { gamePanel.turnOverlayText = ""; gamePanel.repaint(); }); t.setRepeats(false); t.start();
     }
 
     private void startRound() {
@@ -190,7 +227,7 @@ public class CyberQuestRPG extends JFrame {
             if(currentRound==totalRounds && i==0) {
                  if(stage==3) t=EnemyType.ZIP_BOMB; if(stage==6) t=EnemyType.RANSOMWARE; if(stage==10) t=EnemyType.CYBERPUNK;
             }
-            int hp = (int)((40 + stage*10) * t.hpMult); // Low HP (Fragile Enemies)
+            int hp = (int)((40 + stage*10) * t.hpMult);
             arena.add(new Monster("P"+i, t, hp));
         }
         gamePanel.repaint();
@@ -202,7 +239,11 @@ public class CyberQuestRPG extends JFrame {
             if(currentRound<totalRounds) { currentRound++; startRound(); showTurnAnim("NEXT WAVE"); }
             else { 
                 int rew = 1000 + stage*500; GameState.get().currency+=rew; 
-                JOptionPane.showMessageDialog(this, "VICTORY! +$"+rew); dispose(); menuRef.setVisible(true); 
+                GameState.get().currentFloor++; // ADVANCE FLOOR
+                JOptionPane.showMessageDialog(this, "SECTOR CLEARED! ADVANCING TO FLOOR " + GameState.get().currentFloor);
+                dispose(); 
+                menuRef.setVisible(true); 
+                menuRef.dispose(); new MainMenu().setVisible(true); // Refresh
             }
         }
     }

@@ -9,21 +9,25 @@ public class MainMenu extends JFrame {
     }
 
     public MainMenu() {
-        setTitle("CYBER ARCHITECT: POWER UPDATE");
+        setTitle("CYBER ARCHITECT: ROGUELIKE EDITION");
         setSize(1200, 800);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
 
-        JLabel header = new JLabel("SYSTEM BIOS v5.3 [POWER]", SwingConstants.CENTER);
+        JLabel header = new JLabel("SYSTEM BIOS v5.4 [ROGUELIKE]", SwingConstants.CENTER);
         header.setFont(new Font("Consolas", Font.BOLD, 36));
-        header.setForeground(new Color(255, 200, 0));
+        header.setForeground(new Color(255, 100, 50));
         add(header, BorderLayout.NORTH);
 
         JPanel menuPanel = new JPanel(new GridLayout(3, 2, 20, 20));
         menuPanel.setBorder(BorderFactory.createEmptyBorder(30,50,50,50));
 
-        menuPanel.add(createBigBtn("⚔️ BOOT OS (BATTLE)", "Deploy", this::openStageSelect));
+        // UPDATED: Shows current floor on the button
+        GameState gs = GameState.get();
+        JButton btnDeploy = createBigBtn("⚔️ BOOT OS (FLOOR " + gs.currentFloor + ")", "Continue Run", this::deployRun);
+        
+        menuPanel.add(btnDeploy);
         menuPanel.add(createBigBtn("🛠️ SYSTEM CONFIG", "Assemble & Power", this::openConfigurator));
         menuPanel.add(createBigBtn("🛒 COMPONENT SHOP", "Buy Parts", this::openShop));
         menuPanel.add(createBigBtn("🎓 CPU EDUCATION", "Scheduling Simulator", this::openEducation)); 
@@ -38,12 +42,24 @@ public class MainMenu extends JFrame {
         int watts = gs.getTotalWatts();
         int maxW = gs.currentPsu.maxWatts;
         String powerStr = watts + "/" + maxW + "W";
-        setTitle("BUILD: " + gs.currentCpu.label + " | PWR: " + powerStr + " | FUNDS: $" + gs.currency);
+        setTitle("BUILD: " + gs.currentCpu.label + " | PWR: " + powerStr + " | FLOOR: " + gs.currentFloor + " | FUNDS: $" + gs.currency);
     }
 
     private JButton createBigBtn(String t, String s, Runnable r) {
         JButton b = new JButton("<html><center><h1>"+t+"</h1>"+s+"</center></html>");
         b.addActionListener(e -> r.run()); return b;
+    }
+
+    // --- ROGUELIKE DEPLOY ---
+    private void deployRun() {
+        GameState gs = GameState.get();
+        if(gs.getTotalWatts() > gs.currentPsu.maxWatts) {
+            JOptionPane.showMessageDialog(this, "POST FAILURE: PSU OVERLOAD!\nUpgrade PSU or Downclock.", "BOOT ERROR", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        this.setVisible(false);
+        // Direct launch to current floor
+        new CyberQuestRPG(gs.currentFloor, this).setVisible(true);
     }
 
     private void openConfigurator() {
@@ -69,59 +85,46 @@ public class MainMenu extends JFrame {
         p.setBorder(BorderFactory.createEmptyBorder(10,10,10,10));
         GameState gs = GameState.get();
 
-        // 1. PSU
-        p.add(createCombo("POWER SUPPLY", gs.currentPsu, Hardware.PsuType.values(), 
-            ps -> gs.hasPsu(ps), o -> { gs.currentPsu=(Hardware.PsuType)o; d.repaint(); }));
+        p.add(createCombo("POWER SUPPLY", gs.currentPsu, Hardware.PsuType.values(), ps -> gs.hasPsu(ps), o -> { gs.currentPsu=(Hardware.PsuType)o; d.repaint(); }));
+        p.add(createCombo("CPU", gs.currentCpu, Hardware.CpuType.values(), c -> gs.hasCpu(c), o -> { gs.currentCpu=(Hardware.CpuType)o; d.repaint(); }));
+        p.add(createCombo("GPU", gs.currentGpu, Hardware.GpuType.values(), g -> gs.hasGpu(g), o -> { gs.currentGpu=(Hardware.GpuType)o; d.repaint(); }));
+        p.add(createCombo("COOLING", gs.currentCooler, Hardware.CoolerType.values(), c -> gs.hasCooler(c), o -> { gs.currentCooler=(Hardware.CoolerType)o; d.repaint(); }));
 
-        // 2. CPU
-        p.add(createCombo("CPU", gs.currentCpu, Hardware.CpuType.values(), 
-            c -> gs.hasCpu(c), o -> { gs.currentCpu=(Hardware.CpuType)o; d.repaint(); }));
-        
-        // 3. GPU (Only show owned)
-        p.add(createCombo("GPU", gs.currentGpu, Hardware.GpuType.values(), 
-            g -> gs.hasGpu(g), o -> { gs.currentGpu=(Hardware.GpuType)o; d.repaint(); }));
-
-        // 4. COOLER (Only show owned)
-        p.add(createCombo("COOLING", gs.currentCooler, Hardware.CoolerType.values(), 
-            c -> gs.hasCooler(c), o -> { gs.currentCooler=(Hardware.CoolerType)o; d.repaint(); }));
-
-        // POWER METER
+        // Power Meter
         int currentW = gs.getTotalWatts();
         int maxW = gs.currentPsu.maxWatts;
         JProgressBar powerBar = new JProgressBar(0, maxW);
         powerBar.setValue(currentW);
         powerBar.setStringPainted(true);
-        powerBar.setString("POWER LOAD: " + currentW + "W / " + maxW + "W");
-        if(currentW > maxW) {
-            powerBar.setForeground(Color.RED);
-            powerBar.setString("WARNING: POWER OVERLOAD! UPGRADE PSU!");
-        } else {
-            powerBar.setForeground(Color.GREEN);
-        }
+        powerBar.setString("POWER: " + currentW + "W / " + maxW + "W");
+        powerBar.setForeground(currentW > maxW ? Color.RED : Color.GREEN);
         
-        JPanel pwrPanel = new JPanel(new BorderLayout());
-        pwrPanel.add(new JLabel("SYSTEM POWER DRAW:"), BorderLayout.NORTH);
-        pwrPanel.add(powerBar, BorderLayout.CENTER);
-        p.add(pwrPanel);
+        JPanel pwr = new JPanel(new BorderLayout()); pwr.add(new JLabel("LOAD:"), BorderLayout.NORTH); pwr.add(powerBar, BorderLayout.CENTER);
+        p.add(pwr);
 
-        // INFO
-        JTextArea info = new JTextArea("STATS:\nBase HP: "+gs.getCurrentMaxHP()+"\nRAM: "+gs.getCurrentRamMB()+" MB\nHP Regen: "+gs.currentCooler.regen);
+        JTextArea info = new JTextArea("STATS:\nBase HP: "+gs.getCurrentMaxHP()+"\nRAM: "+gs.getCurrentRamMB()+" MB\nRegen: "+gs.currentCooler.regen);
         info.setEditable(false); p.add(info);
-
         return p;
     }
 
     private JPanel createUpgradesPanel(JDialog d) {
-        JPanel p = new JPanel(new GridLayout(4,1)); GameState gs=GameState.get();
-        // RAM
-        int next = gs.ramIndex+1; 
-        JButton bRam=new JButton("RAM: "+gs.getCurrentRamMB()+"MB"+(next<gs.RAM_TIERS.length?" -> "+gs.RAM_TIERS[next]+"MB ($500)":" MAX"));
-        bRam.setEnabled(next<gs.RAM_TIERS.length);
+        JPanel p = new JPanel(new GridLayout(4,1)); 
+        GameState gs = GameState.get();
+
+        // RAM (CAPPED)
+        int nextRam = gs.ramIndex + 1; 
+        boolean ramMaxed = nextRam > gs.MAX_RAM_INDEX;
+        String ramTxt = ramMaxed ? "RAM MAXED ("+gs.getCurrentRamMB()+"MB)" : "RAM: "+gs.getCurrentRamMB()+"MB -> "+gs.RAM_TIERS[nextRam]+"MB ($500)";
+        JButton bRam = new JButton(ramTxt);
+        bRam.setEnabled(!ramMaxed);
         bRam.addActionListener(e->{if(gs.currency>=500){gs.currency-=500;gs.ramIndex++; d.repaint(); openConfigurator();}});
         p.add(bRam);
         
-        // STORAGE (Linear Upgrade)
-        JButton bSto=new JButton("SSD TIER "+gs.storageLevel+" (+HP) ($300)"); 
+        // STORAGE (CAPPED)
+        boolean storeMaxed = gs.storageLevel >= gs.MAX_STORAGE_LEVEL;
+        String stoTxt = storeMaxed ? "SSD MAXED (Tier "+gs.MAX_STORAGE_LEVEL+")" : "SSD TIER "+gs.storageLevel+" (+HP) ($300)";
+        JButton bSto = new JButton(stoTxt);
+        bSto.setEnabled(!storeMaxed);
         bSto.addActionListener(e->{if(gs.currency>=300){gs.currency-=300;gs.storageLevel++;d.repaint(); openConfigurator();}});
         p.add(bSto);
         
@@ -148,20 +151,17 @@ public class MainMenu extends JFrame {
     private void openShop() {
         JDialog d = new JDialog(this, "NEWEGG...ISH", true); d.setSize(800, 600); d.setLayout(new GridLayout(0, 2));
         GameState gs = GameState.get();
-        
-        // Function to create buy buttons
         createShopSection(d, "CPUs", Hardware.CpuType.values(), c -> c.cost, c -> " ("+c.watts+"W)", i -> gs.addCpu((Hardware.CpuType)i));
         createShopSection(d, "GPUs", Hardware.GpuType.values(), c -> c.cost, c -> " ("+c.watts+"W)", i -> gs.addGpu((Hardware.GpuType)i));
         createShopSection(d, "Coolers", Hardware.CoolerType.values(), c -> c.cost, c -> "", i -> gs.addCooler((Hardware.CoolerType)i));
         createShopSection(d, "PSUs", Hardware.PsuType.values(), c -> c.cost, c -> " ("+c.maxWatts+"W)", i -> gs.addPsu((Hardware.PsuType)i));
-        
         d.setVisible(true);
     }
     
     private <T> void createShopSection(JDialog d, String title, T[] items, java.util.function.Function<T,Integer> costFunc, java.util.function.Function<T,String> infoFunc, java.util.function.Consumer<T> buyAction) {
         for(T item : items) {
             int cost = costFunc.apply(item);
-            if(cost == 0) continue; // Skip default items
+            if(cost == 0) continue; 
             JButton b = new JButton(item.toString() + infoFunc.apply(item) + " - $" + cost);
             b.addActionListener(e -> {
                 if(GameState.get().currency >= cost) {
@@ -177,14 +177,4 @@ public class MainMenu extends JFrame {
 
     private void openLogs() { new JFrame("LOGS").add(new GanttChartPanel()); }
     private void openEducation() { JFrame f=new JFrame("SIMULATOR"); f.setSize(800,500); f.add(new SchedulerSimulator()); f.setVisible(true); }
-    private void openStageSelect() {
-        GameState gs = GameState.get();
-        if(gs.getTotalWatts() > gs.currentPsu.maxWatts) {
-            JOptionPane.showMessageDialog(this, "SYSTEM HALTED: INSUFFICIENT POWER SUPPLY!\nUpgrade PSU or Downclock.", "POST ERROR", JOptionPane.ERROR_MESSAGE);
-            return;
-        }
-        String[] s = new String[10]; for(int i=0; i<10; i++) s[i]="Stage "+(i+1);
-        int c = JOptionPane.showOptionDialog(this, "DEPLOY", "STAGES", 0, 0, null, s, s[0]);
-        if(c!=-1) { setVisible(false); new CyberQuestRPG(c+1, this).setVisible(true); }
-    }
 }
