@@ -37,11 +37,9 @@ public class SchedulerSimulator extends JPanel {
 
         add(controls, BorderLayout.NORTH);
 
-        // Visualization
         drawPanel = new DrawPanel();
         add(drawPanel, BorderLayout.CENTER);
 
-        // Explanation Text
         explanation = new JTextArea(5, 40);
         explanation.setEditable(false);
         explanation.setFont(new Font("SansSerif", Font.PLAIN, 14));
@@ -51,9 +49,9 @@ public class SchedulerSimulator extends JPanel {
     }
 
     private void updateText() {
-        if(currentAlgo.equals("FCFS")) explanation.setText("First-Come, First-Served (FCFS):\nThe CPU executes processes in the exact order they arrive.\nSimple, but a long process can block short ones (Convoy Effect).");
-        if(currentAlgo.equals("SJF")) explanation.setText("Shortest Job First (SJF):\nThe CPU scans the queue and picks the process with the smallest Burst Time.\nMost efficient for throughput, but can starve long processes.");
-        if(currentAlgo.equals("Round Robin")) explanation.setText("Round Robin (RR):\nEach process gets a small 'Time Quantum'. If it doesn't finish, it goes to the back of the queue.\nGreat for multitasking fairness.");
+        if(currentAlgo.equals("FCFS")) explanation.setText("First-Come, First-Served (FCFS):\nThe CPU executes processes in the exact order they arrive.");
+        if(currentAlgo.equals("SJF")) explanation.setText("Shortest Job First (SJF):\nThe CPU scans the queue and picks the process with the smallest Burst Time.");
+        if(currentAlgo.equals("Round Robin")) explanation.setText("Round Robin (RR):\nEach process gets a small 'Time Quantum'. If it doesn't finish, it goes to the back.");
     }
 
     private void addRandomProcess() {
@@ -75,7 +73,7 @@ public class SchedulerSimulator extends JPanel {
             if (activeProcess == null) {
                 if (queue.isEmpty()) { ((Timer)e.getSource()).stop(); return; }
                 
-                // PICK NEXT PROCESS BASED ON ALGO
+                // Logic for picking next process based on Algorithm
                 if (currentAlgo.equals("FCFS")) {
                     activeProcess = queue.remove(0);
                 } 
@@ -110,13 +108,13 @@ public class SchedulerSimulator extends JPanel {
         public Process(String n, int b) { name=n; burst=b; }
     }
 
+    // Custom drawing for the Simulator
     private class DrawPanel extends JPanel {
         @Override
         protected void paintComponent(Graphics g) {
             super.paintComponent(g);
             g.setColor(Color.DARK_GRAY); g.fillRect(0,0,getWidth(),getHeight());
             
-            // Draw CPU
             g.setColor(Color.LIGHT_GRAY); g.fillRect(50, 50, 100, 100);
             g.setColor(Color.BLACK); g.drawString("CPU", 90, 105);
             
@@ -129,7 +127,6 @@ public class SchedulerSimulator extends JPanel {
                 g.setColor(Color.GREEN); g.fillRect(60, 130, pct, 5);
             }
 
-            // Draw Queue
             int x = 200;
             for(Process p : queue) {
                 g.setColor(Color.ORANGE);
